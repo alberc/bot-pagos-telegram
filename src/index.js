@@ -3,6 +3,7 @@ require("dotenv").config();
 const { Telegraf } = require("telegraf");
 const LocalSession = require("telegraf-session-local");
 const commandParts = require("telegraf-command-parts");
+const cron = require("node-cron");
 
 const markAsPaid = require("./commands/markAsPaid");
 const checkPaid = require("./commands/checkPaid");
@@ -47,5 +48,39 @@ bot.command("registro", register);
 bot.command("invitacion", checkAdminMiddleware, invite);
 bot.command("activar", enable);
 bot.command("desactivar", disable);
+
+cron.schedule(
+  "* 16 5,10,15 * *",
+  async () => {
+    // 1. Get users and date
+    const users = localSession.DB.get("users")
+      .filter({ disabled: false })
+      .value();
+    const today = new Date();
+
+    // 2. Get pending payment users
+    const pending = users.filter(({ id }) => {
+      const payment = localSession.DB.get("payments")
+        .find({
+          user: id,
+          year: today.getFullYear(),
+          month: today.getMonth(),
+        })
+        .value();
+
+      return !payment;
+    });
+
+    const userIds = pending.map(({ id }) => id);
+    for (let i = 0; i < userIds.length; i++) {
+      const userId = userIds[i];
+      await bot.telegram.sendMessage(userId, "¡Recordatorio! ⏰");
+    }
+  },
+  {
+    scheduled: true,
+    timezone: "Europe/Madrid",
+  }
+);
 
 bot.startPolling();
